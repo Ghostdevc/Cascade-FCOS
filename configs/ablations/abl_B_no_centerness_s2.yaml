@@ -1,0 +1,9 @@
+# Ablation B-2: Stage-2 evaluation WITHOUT centerness weighting
+# Train identically to refinement_k1.yaml (same checkpoint).
+# The flag is read only by evaluate.py, not by main.py/train.py.
+# Run:
+#   python evaluate.py --checkpoint logs/checkpoints/stage2_epoch008.pth \
+#                      --eval_stages 2 --no_centerness_stages 2
+run_name: "abl_B_no_cent_s2"
+extends:  "configs/refinement_k1.yaml"
+no_centerness_stages: [2]   # evaluate.py uses this; training is unchanged

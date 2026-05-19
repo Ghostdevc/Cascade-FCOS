@@ -1,0 +1,7 @@
+# Ablation B-23: Stages 2+3 evaluated WITHOUT centerness weighting
+# Run:
+#   python evaluate.py --checkpoint logs/checkpoints/stage3_epoch006.pth \
+#                      --eval_stages 1 2 3 --no_centerness_stages 2 3
+run_name: "abl_B_no_cent_s23"
+extends:  "configs/refinement_k2.yaml"
+no_centerness_stages: [2, 3]

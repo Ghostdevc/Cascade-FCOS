@@ -1,0 +1,18 @@
+# Ablation C-aggressive — Stage 2, radius aggressively tightened (0.75)
+# Tests whether very tight sampling at stage 2 helps or hurts.
+run_name: "abl_C_aggressive_s2"
+data_dir:  "data/VOCdevkit"
+stage:     2
+tier:      2
+epochs:    8
+batch_size: 4
+num_workers: 4
+lr:           0.00005
+weight_decay: 0.0001
+lr_milestones: [5, 7]
+lr_gamma:      0.1
+center_radius: 0.75       # <-- aggressive (default is 1.0)
+checkpoint_dir: "logs/checkpoints/abl_C_aggressive"
+with_centerness_repred: true
+num_stages: 2
+ablation: "C_aggressive_radius"
