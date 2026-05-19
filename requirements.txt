@@ -1,0 +1,39 @@
+# --- Core Deep Learning ---
+# We will install torch and torchvision separately to ensure the correct CUDA version.
+# Do NOT put torch in this file directly unless you specify the index url.
+
+# --- Data & Math ---
+numpy<2.0.0          # Strictly < 2.0 to avoid the C++ compilation crashes you faced earlier. version 1.26.4 is ideal.
+scipy
+pandas
+
+# --- Vision & Augmentation ---
+opencv-python<4.9.0  # Older version to prevent conflicts with numpy 1.x 
+Pillow
+albumentations       # Highly recommended for pure PyTorch data augmentation
+
+# --- Visualization & Notebooks ---
+matplotlib
+seaborn              # Useful for ablation study plots and LQ histograms 
+jupyter              # Required to export your final notebook for grading 
+tqdm                 # For training loop progress bars
+
+# --- Architecture & Utilities ---
+timm                 # For loading backbone models easily (like ConvNeXt or ResNet) 
+pycocotools          # Essential for calculating mAP and standard detection metrics
+
+# --- Fallback dependencies (in case you use mim/MMDetection later) ---
+setuptools<81.0.0    # Prevents the "No module named 'pkg_resources'" error 
+importlib-metadata   # Fixes mmpretrain dependency issues 
+
+# Installation Steps
+
+# To ensure everything installs correctly without CUDA conflicts, I recommend installing PyTorch first, and then the requirements file:
+
+# 1. Install PyTorch 2.1.0 (with CUDA 12.1):
+
+# pip install torch==2.1.0 torchvision==0.16.0 --index-url https://download.pytorch.org/whl/cu121
+
+# 2. Install the rest of the packages:
+
+# pip install -r requirements.txt
