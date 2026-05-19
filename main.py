@@ -32,6 +32,11 @@ import argparse
 import json
 import os
 import sys
+try:
+    import lzma
+except ImportError:
+    from backports import lzma
+    sys.modules['lzma'] = lzma
 
 import torch
 import torch.optim as optim
