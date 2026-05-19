@@ -219,3 +219,4 @@ __marimo__/
 
 data/
 prompt_files/
+logs/checkpoints/
