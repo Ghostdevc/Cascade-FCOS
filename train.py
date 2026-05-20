@@ -1,14 +1,12 @@
 """
-train.py — Staged training loop for Cascade FCOS.
+train.py — Staged training loop for Cascade FCOS (Tier 1, torchvision baseline).
 
-Step 4 changes vs. original
-----------------------------
-- train_one_epoch accepts a `stage` arg (1,2,3) controlling:
-    * Which stage's predictions/loss to use.
-    * Whether prev_bbox_preds are passed for re-anchored target generation.
-    * The center-sampling radius (1.5 -> 1.0 -> 0.75, progressively tighter).
-- Only the current stage's loss is backpropagated.
-- save_checkpoint / load_checkpoint support chain-loading between stages.
+Key changes for Tier 1:
+- Stage 1 uses torchvision FCOS predictions. Torchvision regresses
+  stride-normalised (l,t,r,b), so we multiply by stride to get pixel units
+  before computing loss (target generator produces pixel-unit targets).
+- Stages 2/3 use our RefinementHead which already outputs exp(scale*raw)
+  in pixel units, no scaling needed.
 """
 
 import os
@@ -20,15 +18,14 @@ import torch.nn.utils as nn_utils
 from models.loss import FCOSLoss
 from models.target_generator import DynamicFCOSTargetGenerator
 
-# Center-sampling radii per stage.
-# Stage 1: r=1.5 is FCOS paper optimum (Table 6, TPAMI 2022).
-# Stages 2/3: progressively tighter — analogous to Cascade R-CNN's increasing
-# IoU thresholds (Cai & Vasconcelos, CVPR 2018, Sec. 3.1).
+# Center-sampling radii per stage
 STAGE_CENTER_RADIUS = {1: 1.5, 2: 1.0, 3: 0.75}
+
+# FPN strides (P3..P7)
+FPN_STRIDES = [8, 16, 32, 64, 128]
 
 
 def pad_batch_images(images):
-    """Pad variable-size tensors to (max_H, max_W) in the batch."""
     max_h = max(img.shape[1] for img in images)
     max_w = max(img.shape[2] for img in images)
     return torch.stack([
@@ -38,38 +35,56 @@ def pad_batch_images(images):
 
 
 def _flatten_level_preds(preds_per_level, channels):
-    """Flatten List[Tensor(B,C,H_i,W_i)] -> Tensor(B*N_total, channels)."""
     return torch.cat(
         [p.permute(0, 2, 3, 1).reshape(-1, channels) for p in preds_per_level],
         dim=0,
     )
 
 
-def _extract_prev_bbox_per_image(bbox_preds_prev, img_idx):
-    """Extract List[Tensor(N_i, 4)] for one image from batch-level preds."""
-    return [
-        bp[img_idx].permute(1, 2, 0).reshape(-1, 4)
-        for bp in bbox_preds_prev
-    ]
+def _flatten_level_preds_with_stride(bbox_per_level, channels=4):
+    """Same as _flatten_level_preds but multiplies each level's regression
+    output by its FPN stride, converting stride-normalised → pixel units.
+
+    Used ONLY for Stage 1 (torchvision FCOS native output is stride-normalised).
+    Stages 2/3 use our RefinementHead which already outputs pixel units.
+    """
+    flat = []
+    for p, stride in zip(bbox_per_level, FPN_STRIDES):
+        # p: (B, 4, H, W)
+        p_scaled = p * stride
+        flat.append(p_scaled.permute(0, 2, 3, 1).reshape(-1, channels))
+    return torch.cat(flat, dim=0)
+
+
+def _extract_prev_bbox_per_image(bbox_preds_prev, img_idx, scale_with_stride=False):
+    """Extract per-image, per-level prev bbox preds.
+
+    Args:
+        scale_with_stride: True if previous-stage predictions are stride-normalised
+                           (i.e. coming from torchvision FCOS stage 1).
+    """
+    out = []
+    for lvl, bp in enumerate(bbox_preds_prev):
+        # bp: (B, 4, H, W)
+        bp_img = bp[img_idx].permute(1, 2, 0).reshape(-1, 4)
+        if scale_with_stride:
+            bp_img = bp_img * FPN_STRIDES[lvl]
+        out.append(bp_img)
+    return out
 
 
 def train_one_epoch(
     model,
     dataloader,
     optimizer,
-    target_generator,
+    target_gen,
     loss_fn,
     device,
     epoch,
     stage,
     log_file,
 ):
-    """Train one epoch for cascade stage `stage` (1, 2, or 3).
-
-    Frozen parameters (set by main.py) receive no optimizer updates.
-    detach() calls in cascade_fcos.py prevent gradients from propagating
-    backward through frozen upstream stages.
-    """
+    """Train one epoch for the specified stage (1, 2, or 3)."""
     assert stage in (1, 2, 3)
     model.train()
     total_loss    = 0.0
@@ -77,21 +92,33 @@ def train_one_epoch(
     stage_key     = f"stage_{stage}"
     prev_bbox_key = {2: "bbox_preds_s1", 3: "bbox_preds_s2"}.get(stage, None)
 
+    # Stage 1: torchvision raw output is stride-normalised, must scale up.
+    # Stage 2,3: our RefinementHead outputs pixel units already.
+    current_stage_needs_stride_scale = (stage == 1)
+    # For prev_bbox in stage 2 (coming from stage 1), need to scale up.
+    # For prev_bbox in stage 3 (coming from stage 2), already in pixels.
+    prev_stage_needs_stride_scale = (stage == 2)
+
     for batch_idx, (images_list, targets_list) in enumerate(dataloader):
         images = pad_batch_images(images_list).to(device)
         optimizer.zero_grad()
 
-        # Full forward (upstream stages are frozen; detach() isolates gradients)
-        cascade_preds = model(images)
+        # Forward (up to max_stage=stage, saves memory)
+        cascade_preds = model(images, max_stage=stage)
 
-        # Static FPN grid — shared across all images in the padded batch
-        base_locations = target_generator.compute_locations(cascade_preds["features_s1"])
+        # Static FPN grid (shared across batch — images are padded equally)
+        base_locations = target_gen.compute_locations(cascade_preds["features_s1"])
 
         # Current stage predictions
         cls_preds, reg_preds, cent_preds = cascade_preds[stage_key]
-        flat_cls  = _flatten_level_preds(cls_preds,  20)
-        flat_reg  = _flatten_level_preds(reg_preds,   4)
-        flat_cent = _flatten_level_preds(cent_preds,  1)
+        flat_cls  = _flatten_level_preds(cls_preds, cls_preds[0].shape[1])
+        flat_cent = _flatten_level_preds(cent_preds, 1)
+
+        # Regression: scale stride-normalised → pixel units for Stage 1
+        if current_stage_needs_stride_scale:
+            flat_reg = _flatten_level_preds_with_stride(reg_preds)
+        else:
+            flat_reg = _flatten_level_preds(reg_preds, 4)
 
         # Per-image target generation (with re-anchoring for stages 2/3)
         batch_labels, batch_reg_tgts = [], []
@@ -102,10 +129,11 @@ def train_one_epoch(
             prev_bbox = None
             if prev_bbox_key is not None:
                 prev_bbox = _extract_prev_bbox_per_image(
-                    cascade_preds[prev_bbox_key], img_idx
+                    cascade_preds[prev_bbox_key], img_idx,
+                    scale_with_stride=prev_stage_needs_stride_scale,
                 )
 
-            labels, reg_tgts = target_generator.generate_targets_for_image(
+            labels, reg_tgts = target_gen.generate_targets_for_image(
                 base_locations, gt_boxes, gt_labels,
                 center_radius=center_radius,
                 prev_bbox_preds_per_level=prev_bbox,
@@ -145,7 +173,6 @@ def train_one_epoch(
 
 
 def save_checkpoint(epoch, model, optimizer, loss, stage, save_dir="logs/checkpoints"):
-    """Save a stage-labelled checkpoint. Filename: stage{N}_epoch{EEE}.pth."""
     os.makedirs(save_dir, exist_ok=True)
     path = os.path.join(save_dir, f"stage{stage}_epoch{epoch:03d}.pth")
     torch.save({
@@ -160,11 +187,14 @@ def save_checkpoint(epoch, model, optimizer, loss, stage, save_dir="logs/checkpo
 
 
 def load_checkpoint(model, path, optimizer=None, device="cpu"):
-    """Load checkpoint; optionally restore optimizer state. Returns (epoch, loss)."""
     ckpt = torch.load(path, map_location=device)
-    model.load_state_dict(ckpt["model_state_dict"])
+    # strict=False because stage-2 checkpoint may not have stage_3 keys, etc.
+    model.load_state_dict(ckpt["model_state_dict"], strict=False)
     if optimizer is not None and "optimizer_state_dict" in ckpt:
-        optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+        try:
+            optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+        except Exception as e:
+            print(f"[Checkpoint] Optimizer state mismatch (expected when changing stages): {e}")
     print(
         f"[Checkpoint] Loaded stage={ckpt.get('stage','?')} "
         f"epoch={ckpt['epoch']} from {path}"

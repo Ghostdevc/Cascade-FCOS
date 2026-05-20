@@ -1,33 +1,19 @@
-# ─────────────────────────────────────────────────────────────
-# Stage 1: Baseline FCOS Head Training
-# Tier 2 — backbone + FPN frozen; only head_stage_1 trained.
-# ─────────────────────────────────────────────────────────────
-run_name: "stage1_baseline"
+run_name: "stage1_tier1"
+data_dir: "/content/VOCdevkit"
 
-# Dataset
-data_dir: "data/VOCdevkit"   # path to VOCdevkit/ containing VOC2007 and VOC2012
+stage:        1
+epochs:       3
+batch_size:   16
+num_workers:  4
 
-# Training
-stage:       1
-tier:        3          # 2=freeze backbone+FPN, 3=freeze backbone only
-epochs:      10
-batch_size:  16          # 4 images/GPU @ 12 GB VRAM (800px short-edge)
-num_workers: 4
+lr:            0.0005
+weight_decay:  0.0001
 
-# Optimiser (AdamW)
-lr:           0.0002    # 1e-4; standard for frozen-backbone detection head
-weight_decay: 0.0001
-
-# LR schedule: reduce by ×0.1 at epochs 8 and 11 (standard VOC schedule)
-lr_milestones: [7, 9]
+lr_milestones: [2]
 lr_gamma:      0.1
 
-# Target generator
-center_radius: 1.5      # FCOS paper Table 6 optimum
+center_radius: 1.5
 
-# Checkpoints
 checkpoint_dir: "/content/drive/MyDrive/cascade_fcos/checkpoints"
-
-# Ablation knobs (referenced by ablation configs)
-with_centerness_repred: true   # whether stage-2/3 heads re-predict centerness
-num_stages: 1                  # T=1 means baseline only (no refinement)
+with_centerness_repred: true
+num_stages: 1

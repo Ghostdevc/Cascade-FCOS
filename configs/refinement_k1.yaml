@@ -1,26 +1,18 @@
-# ─────────────────────────────────────────────────────────────
-# Stage 2: First Refinement (FCM₁→₂ + Head₂)
-# Load stage-1 checkpoint; freeze head_stage_1 + backbone+FPN.
-# ─────────────────────────────────────────────────────────────
-run_name: "stage2_tier3"
-
+run_name: "stage2_tier1"
 data_dir: "/content/VOCdevkit"
 
-stage:       2
-tier:        3
-epochs:      6           # fewer epochs: head-2 starts from a good initialisation
-batch_size:  16
-num_workers: 4
+stage:        2
+epochs:       4
+batch_size:   16
+num_workers:  4
 
-# Lower LR: stage-2 head is a refinement on top of trained stage-1 features;
-# aggressive LR would disturb the already-learned representations in FCM.
-lr:           0.0001
-weight_decay: 0.0001
+lr:            0.0003
+weight_decay:  0.0001
 
-lr_milestones: [4, 5]
+lr_milestones: [3]
 lr_gamma:      0.1
 
-center_radius: 1.0       # tighter than stage 1 (1.5) — higher-quality positives
+center_radius: 1.0
 
 checkpoint_dir: "/content/drive/MyDrive/cascade_fcos/checkpoints"
 with_centerness_repred: true
