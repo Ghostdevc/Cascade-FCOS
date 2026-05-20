@@ -1,0 +1,47 @@
+{
+  "performance": {
+    "1": {
+      "mAP_coco": 0.00030448948382399976,
+      "mAP_50": 0.0013228474417701364,
+      "mAP_75": 1.5704625184298493e-05,
+      "mAP_small": 0.0,
+      "mAP_medium": 0.0,
+      "mAP_large": 0.0003281906247138977,
+      "AR_1": 0.0009960246970877051,
+      "AR_10": 0.0034452297259122133
+    },
+    "2": {
+      "mAP_coco": 0.0002481330302543938,
+      "mAP_50": 0.0010831719264388084,
+      "mAP_75": 4.909138806397095e-05,
+      "mAP_small": 0.0,
+      "mAP_medium": 0.0,
+      "mAP_large": 0.00028163843671791255,
+      "AR_1": 0.001402385183610022,
+      "AR_10": 0.003900176612660289
+    },
+    "3": {
+      "mAP_coco": 0.00017098250100389123,
+      "mAP_50": 0.0007942898664623499,
+      "mAP_75": 2.185294943046756e-05,
+      "mAP_small": 0.0,
+      "mAP_medium": 0.0,
+      "mAP_large": 0.00018535250273998827,
+      "AR_1": 0.0007773851393721998,
+      "AR_10": 0.0027826854493469
+    }
+  },
+  "complexity": {
+    "total_params": 41906750,
+    "trainable_params": 41853630,
+    "gflops": "N/A",
+    "gflops_note": "lower bound (DeformConv2d may be under-counted)",
+    "full_cascade_ms": 208.86,
+    "full_cascade_fps": 4.8,
+    "stage1_only_ms": 90.17,
+    "overhead_pct": 131.6,
+    "overhead_target": "<15%",
+    "overhead_pass": false,
+    "peak_gpu_mem_mb": 437.4
+  }
+}

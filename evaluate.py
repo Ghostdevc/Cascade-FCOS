@@ -64,6 +64,13 @@ import os
 import time
 from typing import Dict, List, Optional, Set, Tuple
 
+import sys
+try:
+    import lzma
+except ImportError:
+    from backports import lzma
+    sys.modules['lzma'] = lzma
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -230,16 +237,12 @@ def evaluate_stage(
     except ImportError:
         raise ImportError("pip install torchmetrics")
 
+    
     metric = MeanAveragePrecision(
         box_format="xyxy",
         iou_type="bbox",
-        iou_thresholds=None,      # COCO default [0.50:0.05:0.95]
-        area_ranges={
-            "all":    (0, float("inf")),
-            "small":  (0, AREA_SMALL),
-            "medium": (AREA_SMALL, AREA_MEDIUM),
-            "large":  (AREA_MEDIUM, float("inf")),
-        },
+        iou_thresholds=None,         # COCO default [0.50:0.05:0.95]
+        extended_summary=True,       # map_small/medium/large
         max_detection_thresholds=[1, 10, 100],
     )
 

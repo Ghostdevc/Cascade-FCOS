@@ -26,6 +26,9 @@ pycocotools          # Essential for calculating mAP and standard detection metr
 setuptools<81.0.0    # Prevents the "No module named 'pkg_resources'" error 
 importlib-metadata   # Fixes mmpretrain dependency issues 
 
+pycocotools 
+torchmetrics>=1.3.0
+
 # Installation Steps
 
 # To ensure everything installs correctly without CUDA conflicts, I recommend installing PyTorch first, and then the requirements file:
