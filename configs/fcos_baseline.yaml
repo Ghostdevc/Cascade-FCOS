@@ -9,24 +9,24 @@ data_dir: "data/VOCdevkit"   # path to VOCdevkit/ containing VOC2007 and VOC2012
 
 # Training
 stage:       1
-tier:        2          # 2=freeze backbone+FPN, 3=freeze backbone only
-epochs:      12
-batch_size:  4          # 4 images/GPU @ 12 GB VRAM (800px short-edge)
+tier:        3          # 2=freeze backbone+FPN, 3=freeze backbone only
+epochs:      10
+batch_size:  16          # 4 images/GPU @ 12 GB VRAM (800px short-edge)
 num_workers: 4
 
 # Optimiser (AdamW)
-lr:           0.0001    # 1e-4; standard for frozen-backbone detection head
+lr:           0.0002    # 1e-4; standard for frozen-backbone detection head
 weight_decay: 0.0001
 
 # LR schedule: reduce by ×0.1 at epochs 8 and 11 (standard VOC schedule)
-lr_milestones: [8, 11]
+lr_milestones: [7, 9]
 lr_gamma:      0.1
 
 # Target generator
 center_radius: 1.5      # FCOS paper Table 6 optimum
 
 # Checkpoints
-checkpoint_dir: "logs/checkpoints"
+checkpoint_dir: "/content/drive/MyDrive/cascade_fcos/checkpoints"
 
 # Ablation knobs (referenced by ablation configs)
 with_centerness_repred: true   # whether stage-2/3 heads re-predict centerness

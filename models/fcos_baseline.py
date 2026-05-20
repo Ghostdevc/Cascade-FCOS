@@ -90,6 +90,19 @@ class FCOSBackboneFPN(nn.Module):
                 for p in m.parameters():
                     p.requires_grad = False
 
+    def train(self, mode=True):
+        """Override train() to keep BatchNorm in eval mode after every mode switch.
+        
+        Standard detection practice (FCOS, RetinaNet, etc.): BN statistics from
+        ImageNet pretraining are kept frozen during detection training, because
+        detection batch sizes are too small to estimate reliable batch stats.
+        """
+        super().train(mode)
+        for m in self.modules():
+            if isinstance(m, nn.BatchNorm2d):
+                m.eval()
+        return self
+
     def _init_fpn_weights(self):
         for m in [
             self.lat_prj3, self.lat_prj4, self.lat_prj5,
