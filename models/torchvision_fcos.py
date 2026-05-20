@@ -13,6 +13,8 @@ We rebuild the classification subnet's final conv with num_classes=20 for VOC
 (the COCO model has 91 classes), keeping all other COCO-pretrained weights.
 """
 
+import torch.nn.functional as F
+
 import math
 from typing import List, Tuple
 
@@ -102,7 +104,7 @@ class TorchvisionFCOSWrapper(nn.Module):
 
             # Regression subnet (returns bbox + centerness)
             reg_feat = self.reg_head.conv(feat)
-            bbox_reg = self.reg_head.bbox_reg(reg_feat)
+            bbox_reg = F.relu(self.reg_head.bbox_reg(reg_feat))
             ctrness  = self.reg_head.bbox_ctrness(reg_feat)
             bbox_per_level.append(bbox_reg)
             cent_per_level.append(ctrness)

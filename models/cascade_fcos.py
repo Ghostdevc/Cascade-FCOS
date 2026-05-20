@@ -21,6 +21,11 @@ from .torchvision_fcos import TorchvisionFCOSWrapper
 from .refinement_module import LightweightFCM
 
 
+# FPN strides for P3..P7 — used to convert torchvision's stride-normalised
+# bbox predictions back to pixel units for consistent FCM input across stages.
+FPN_STRIDES = [8, 16, 32, 64, 128]
+
+
 class RefinementHead(nn.Module):
     """Lightweight head for refinement stages (2 and 3).
 
@@ -152,15 +157,18 @@ class CascadeFCOS(nn.Module):
         # ── Stage 1: torchvision FCOS ─────────────────────────────────────
         features_s1, cls_s1, bbox_s1, cent_s1 = self.baseline_fcos(images)
 
-        # Decode torchvision raw bbox_regression to absolute pixel distances:
-        # torchvision predicts stride-normalised offsets, we multiply by stride.
-        # But for the FCM, RAW values are fine (they encode displacement direction).
-        bbox_s1_detached = self._detach(bbox_s1)
+        # Torchvision FCOS outputs stride-normalised (l,t,r,b).
+        # Convert to pixel units for downstream FCM + target generator.
+        # This ensures FCM_1_to_2 and FCM_2_to_3 see consistent input scales
+        # (both in pixel units), making box_proj weights transferable in spirit.
+        bbox_s1_pixel = [
+            bp.detach() * FPN_STRIDES[i] for i, bp in enumerate(bbox_s1)
+        ]
 
         result = {
             "stage_1":       (cls_s1, bbox_s1, cent_s1),
             "features_s1":   features_s1,
-            "bbox_preds_s1": bbox_s1_detached,
+            "bbox_preds_s1": bbox_s1_pixel,
             "bbox_preds_s2": None,
             "stage_2":       None,
             "stage_3":       None,
@@ -169,7 +177,7 @@ class CascadeFCOS(nn.Module):
             return result
 
         # ── Stage 2 ───────────────────────────────────────────────────────
-        features_s2 = self._apply_fcm(self.fcm_1_to_2, features_s1, bbox_s1_detached)
+        features_s2 = self._apply_fcm(self.fcm_1_to_2, features_s1, bbox_s1_pixel)
         cls_s2, bbox_s2, cent_s2 = self.head_stage_2(features_s2)
         bbox_s2_detached = self._detach(bbox_s2)
 

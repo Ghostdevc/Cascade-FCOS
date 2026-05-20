@@ -38,6 +38,16 @@ class DynamicFCOSTargetGenerator:
 
     def __init__(self, fpn_strides: List[int] = None):
         self.fpn_strides = fpn_strides or [8, 16, 32, 64, 128]
+        # FCOS FPN size ranges (TPAMI paper Sec. 2.2):
+        # Each level handles a specific object size band.
+        # max(l,t,r,b) of a positive sample must fall in this band.
+        self.fpn_size_ranges = [
+            (0,    64),
+            (64,   128),
+            (128,  256),
+            (256,  512),
+            (512,  float('inf')),
+        ]
 
     # ------------------------------------------------------------------
     # Helpers
@@ -178,6 +188,22 @@ class DynamicFCOSTargetGenerator:
         # Mask 1: query point must be inside the GT box.
         is_in_boxes = reg_targets.min(dim=-1)[0] > 0     # (N, M)
 
+        # Mask 1b: FPN size-range constraint (FCOS paper Sec. 2.2).
+        # Each FPN level only handles objects in its size band:
+        #   P3: 0-64 px, P4: 64-128, P5: 128-256, P6: 256-512, P7: 512+
+        # This prevents tiny locations (P3) from trying to regress huge objects.
+        n_per_level = [loc.shape[0] for loc in query_locations_per_level]
+        level_idx_per_loc = torch.cat([
+            torch.full((n,), i, dtype=torch.long, device=device)
+            for i, n in enumerate(n_per_level)
+        ])  # (N,)
+        m_lo = torch.tensor([r[0] for r in self.fpn_size_ranges],
+                            device=device)[level_idx_per_loc]  # (N,)
+        m_hi = torch.tensor([r[1] for r in self.fpn_size_ranges],
+                            device=device)[level_idx_per_loc]  # (N,)
+        max_reg = reg_targets.max(dim=-1)[0]   # (N, M) — max(l,t,r,b)
+        is_in_size_range = (max_reg >= m_lo[:, None]) & (max_reg <= m_hi[:, None])
+
         # ── Step 2: dynamic center-sampling mask ──────────────────────────
         # For each GT, build a "center sub-box" of radius R·stride around
         # the GT center, then require the query point to lie inside it.
@@ -212,7 +238,7 @@ class DynamicFCOSTargetGenerator:
         # ── Step 3: ambiguity resolution (smallest-area GT wins) ──────────
         gt_areas = (gt_boxes[:, 2] - gt_boxes[:, 0]) * (gt_boxes[:, 3] - gt_boxes[:, 1])
 
-        valid_mask   = is_in_boxes & is_in_centers   # (N, M)
+        valid_mask   = is_in_boxes & is_in_centers & is_in_size_range   # (N, M)
         areas_matrix = gt_areas[None, :].expand(num_locs, -1).clone()
         areas_matrix[~valid_mask] = float("inf")
 

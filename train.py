@@ -92,12 +92,13 @@ def train_one_epoch(
     stage_key     = f"stage_{stage}"
     prev_bbox_key = {2: "bbox_preds_s1", 3: "bbox_preds_s2"}.get(stage, None)
 
-    # Stage 1: torchvision raw output is stride-normalised, must scale up.
-    # Stage 2,3: our RefinementHead outputs pixel units already.
+    # Stage 1: torchvision raw output is stride-normalised, must scale up
+    # before computing loss against pixel-unit targets.
+    # Stages 2/3: RefinementHead exp(scale*raw) outputs pixel units.
     current_stage_needs_stride_scale = (stage == 1)
-    # For prev_bbox in stage 2 (coming from stage 1), need to scale up.
-    # For prev_bbox in stage 3 (coming from stage 2), already in pixels.
-    prev_stage_needs_stride_scale = (stage == 2)
+    # All prev_bbox are now in pixel units (cascade_fcos.py converts s1 internally),
+    # so no further scaling is needed when passing to target_gen.
+    prev_stage_needs_stride_scale = False
 
     for batch_idx, (images_list, targets_list) in enumerate(dataloader):
         images = pad_batch_images(images_list).to(device)
